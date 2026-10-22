@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Room Sandbox</title>
+  <meta name="description" content="Drop 3D objects into your room at true size using your phone camera.">
+  <meta name="theme-color" content="#eef0ee" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#121413" media="(prefers-color-scheme: dark)">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+  <script type="module" src="vendor/model-viewer.min.js"></script>
+  <style>
+    :root {
+      --bg: #eef0ee;
+      --grid: rgba(20, 30, 25, 0.06);
+      --panel: rgba(255, 255, 255, 0.82);
+      --panel-solid: #ffffff;
+      --ink: #161a18;
+      --muted: #69716d;
+      --line: rgba(20, 30, 25, 0.10);
+      --tile: #f4f6f4;
+      --accent: #1e9e6a;
+      --accent-ink: #ffffff;
+      --focus: #1e9e6a;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #121413;
+        --grid: rgba(255, 255, 255, 0.05);
+        --panel: rgba(28, 31, 30, 0.82);
+        --panel-solid: #1c1f1e;
+        --ink: #eef2ef;
+        --muted: #9aa49f;
+        --line: rgba(255, 255, 255, 0.09);
+        --tile: #252928;
+        --accent: #37c88c;
+        --accent-ink: #0d1411;
+        --focus: #37c88c;
+      }
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; height: 100%; overflow: hidden; }
+    body {
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Inter, system-ui, -apple-system, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    button { font: inherit; color: inherit; }
+
+    /* ---------- Stage ---------- */
+    .stage {
+      position: fixed; inset: 0;
+      background:
+        linear-gradient(var(--grid) 1px, transparent 1px) 0 0 / 32px 32px,
+        linear-gradient(90deg, var(--grid) 1px, transparent 1px) 0 0 / 32px 32px,
+        var(--bg);
+    }
+    model-viewer {
+      position: absolute; top: 0; left: 0; right: 0;
+      bottom: calc(232px + env(safe-area-inset-bottom));
+      width: 100%; height: auto;
+      background: transparent;
+      --poster-color: transparent;
+      --progress-bar-color: var(--accent);
+      --progress-bar-height: 3px;
+    }
+    model-viewer::part(default-ar-button) { display: none; }
+
+    .top {
+      position: fixed; z-index: 5;
+      top: max(14px, env(safe-area-inset-top)); left: 16px; right: 16px;
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      pointer-events: none;
+    }
+    .brand { font-family: "Space Grotesk", system-ui, sans-serif; font-weight: 600; font-size: 18px; letter-spacing: -0.2px; }
+    .brand i { font-style: normal; color: var(--accent); }
+    .size {
+      font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12px;
+      background: var(--panel); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--line); border-radius: 999px; padding: 6px 11px; white-space: nowrap;
+    }
+
+    /* ---------- Bottom panel ---------- */
+    .panel {
+      position: fixed; z-index: 5;
+      left: 50%; transform: translateX(-50%);
+      bottom: max(12px, env(safe-area-inset-bottom));
+      width: min(560px, calc(100% - 24px));
+      background: var(--panel);
+      backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      padding: 14px 14px 14px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.12);
+    }
+    .tray {
+      display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x proximity;
+      margin: 0 -14px; padding: 2px 14px 4px; scrollbar-width: none;
+    }
+    .tray::-webkit-scrollbar { display: none; }
+    .item {
+      flex: 0 0 auto; width: 84px; scroll-snap-align: start;
+      background: var(--tile); border: 1px solid transparent; border-radius: 14px;
+      padding: 6px 6px 8px; cursor: pointer; text-align: center;
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+    }
+    .item img { width: 64px; height: 64px; object-fit: contain; }
+    .item .ph {
+      width: 64px; height: 64px; display: grid; place-items: center;
+      border: 1.5px dashed var(--muted); border-radius: 12px; color: var(--muted);
+    }
+    .item span { font-size: 12px; font-weight: 500; line-height: 1.15; }
+    .item small { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 10px; color: var(--muted); }
+    .item[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+    .item:focus-visible, .chip:focus-visible, .go:focus-visible, .switch:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+    .row { display: flex; align-items: center; gap: 8px; margin-top: 10px; min-height: 30px; }
+    .chips { display: flex; gap: 6px; overflow-x: auto; flex: 1 1 auto; scrollbar-width: none; }
+    .chips::-webkit-scrollbar { display: none; }
+    .chip {
+      flex: 0 0 auto; border: 1px solid var(--line); background: transparent;
+      border-radius: 999px; padding: 5px 11px; font-size: 12.5px; cursor: pointer; white-space: nowrap;
+    }
+    .chip[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+    .chips .none { font-size: 12.5px; color: var(--muted); padding: 5px 2px; }
+
+    .switch { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); cursor: pointer; flex: 0 0 auto; user-select: none; }
+    .switch input { position: absolute; opacity: 0; pointer-events: none; }
+    .track { width: 34px; height: 20px; border-radius: 999px; background: var(--line); position: relative; transition: background .15s; }
+    .track::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--panel-solid); box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .15s; }
+    .switch input:checked + .track { background: var(--accent); }
+    .switch input:checked + .track::after { transform: translateX(14px); }
+
+    .go {
+      margin-top: 12px; width: 100%; height: 52px; border: 0; border-radius: 16px;
+      background: var(--accent); color: var(--accent-ink);
+      font-weight: 600; font-size: 16px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+    }
+    .go svg { width: 22px; height: 22px; }
+    .note { font-size: 12px; color: var(--muted); text-align: center; margin: 8px 6px 0; line-height: 1.4; }
+    .note:empty { display: none; }
+
+    .about { position: fixed; z-index: 6; top: max(12px, env(safe-area-inset-top)); right: 16px; }
+    .about summary { list-style: none; cursor: pointer; }
+    .about summary::-webkit-details-marker { display: none; }
+    .info { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--panel); border: 1px solid var(--line); backdrop-filter: blur(12px); font-size: 13px; font-weight: 600; }
+    .about[open] .card {
+      position: absolute; right: 0; top: 38px; width: min(320px, calc(100vw - 32px));
+      background: var(--panel-solid); border: 1px solid var(--line); border-radius: 16px;
+      padding: 14px; font-size: 12.5px; line-height: 1.5; color: var(--muted);
+      box-shadow: 0 10px 40px rgba(0,0,0,.18);
+    }
+    .card b { color: var(--ink); }
+    .card a { color: inherit; }
+    .card p { margin: 0 0 8px; }
+    .top .size { margin-right: 40px; }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <model-viewer
+      id="viewer"
+      alt="3D object"
+      ar
+      ar-modes="webxr scene-viewer quick-look"
+      ar-placement="floor"
+      ar-scale="fixed"
+      camera-controls
+      touch-action="pan-y"
+      shadow-intensity="1"
+      shadow-softness="0.7"
+      exposure="1"
+      environment-image="neutral"
+      interaction-prompt="none"
+      autoplay>
+    </model-viewer>
+  </div>
+
+  <header class="top">
+    <div class="brand">Room<i>/</i>Sandbox</div>
+    <div class="size" id="size">—</div>
+  </header>
+
+  <details class="about">
+    <summary class="info" aria-label="About and credits">i</summary>
+    <div class="card">
+      <p><b>How it works.</b> Pick an object, then tap <b>Place in your room</b>. Point your phone at the floor and move it slowly until the object appears. Drag to move it, twist with two fingers to rotate.</p>
+      <p><b>True size</b> locks the real-world scale. Turn it off to pinch-resize in AR.</p>
+      <p><b>Credits.</b> Cat &amp; kitten: Quaternius, Animal Pack Vol.2 (CC0). Dog: Quaternius, Ultimate Animated Animal Pack (CC0). Sport bike: made with MediaGeni’s <a href="https://github.com/mediageni/LowPolyMotorcycleGenerator" target="_blank" rel="noopener">Low Poly Motorcycle Generator</a> (MIT). Rendering: <a href="https://modelviewer.dev" target="_blank" rel="noopener">model-viewer</a>.</p>
+    </div>
+  </details>
+
+  <section class="panel" aria-label="Controls">
+    <div class="tray" id="tray" role="toolbar" aria-label="Objects"></div>
+
+    <div class="row">
+      <div class="chips" id="anims" aria-label="Animations"></div>
+      <label class="switch" title="Lock real-world scale in AR">
+        <input type="checkbox" id="trueSize" checked>
+        <span class="track" aria-hidden="true"></span>
+        True size
+      </label>
+    </div>
+
+    <button class="go" id="go" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/>
+        <path d="M12 7.5 8 9.75v4.5L12 16.5l4-2.25v-4.5z"/>
+      </svg>
+      Place in your room
+    </button>
+    <p class="note" id="note"></p>
+    <input type="file" id="file" accept=".glb,model/gltf-binary" hidden>
+  </section>
+
+  <script type="module">
+    const OBJECTS = [
+      { id: 'cat',        name: 'Cat',        src: 'models/cat.glb',        idle: 'Idle', label: '48 cm tall' },
+      { id: 'kitten',     name: 'Kitten',     src: 'models/kitten.glb',     idle: 'Idle', label: '24 cm tall' },
+      { id: 'big-dog',    name: 'Big dog',    src: 'models/big-dog.glb',    idle: 'Idle', label: '85 cm tall' },
+      { id: 'sport-bike', name: 'Sport bike', src: 'models/sport-bike.glb', orbit: '55deg 75deg auto', label: '2.05 m long' },
+      { id: 'cube-10cm',  name: '10 cm cube', src: 'models/cube-10cm.glb',  orbit: '35deg 65deg auto', label: '10 × 10 cm' },
+    ];
+    // Friendlier names for the animal clips.
+    const CLIP_LABEL = { Idle: 'Idle', Idle_2: 'Look around', Idle_2_HeadLow: 'Sniff', Walk: 'Walk', Walking: 'Walk',
+      Gallop: 'Run', Gallop_Jump: 'Jump', Eating: 'Eat', Attack: 'Bark', Death: 'Play dead', Jump_ToIdle: 'Hop' };
+    const CLIP_ORDER = ['Idle', 'Idle_2', 'Idle_2_HeadLow', 'Walk', 'Walking', 'Gallop', 'Gallop_Jump', 'Eating', 'Attack', 'Jump_ToIdle', 'Death'];
+
+    const viewer = document.getElementById('viewer');
+    const $ = (id) => document.getElementById(id);
+    const note = $('note');
+    let current = null, uploadedUrl = null;
+
+    // ---- Tray ----
+    $('tray').innerHTML = OBJECTS.map(o => `
+      <button class="item" type="button" data-id="${o.id}" aria-pressed="false">
+        <img src="thumbs/${o.id}.png" alt=""><span>${o.name}</span><small>${o.label}</small>
+      </button>`).join('') + `
+      <button class="item" type="button" data-id="upload" aria-pressed="false">
+        <div class="ph"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div>
+        <span>Your .glb</span><small>&nbsp;</small>
+      </button>`;
+
+    $('tray').addEventListener('click', (e) => {
+      const btn = e.target.closest('.item');
+      if (!btn) return;
+      if (btn.dataset.id === 'upload') { $('file').click(); return; }
+      select(OBJECTS.find(o => o.id === btn.dataset.id));
+    });
+
+    $('file').addEventListener('change', () => {
+      const f = $('file').files[0];
+      if (!f) return;
+      if (uploadedUrl) URL.revokeObjectURL(uploadedUrl);
+      uploadedUrl = URL.createObjectURL(f);
+      select({ id: 'upload', name: f.name.replace(/\.glb$/i, ''), src: uploadedUrl, uploaded: true });
+    });
+
+    function select(obj) {
+      if (!obj || obj === current) return;
+      current = obj;
+      document.querySelectorAll('.item').forEach(b => b.setAttribute('aria-pressed', b.dataset.id === obj.id));
+      $('size').textContent = 'Loading…';
+      $('anims').innerHTML = '';
+      viewer.alt = `3D model: ${obj.name}`;
+      viewer.cameraOrbit = obj.orbit || '35deg 75deg auto';
+      viewer.animationName = undefined;
+      viewer.src = obj.src;
+      setNote(obj.uploaded
+        ? 'Your file stays on this phone. On Android, AR for uploaded files works in Chrome’s built-in AR view; it can’t be handed to Google’s Scene Viewer.'
+        : (viewer.canActivateAR ? '' : desktopNote));
+      if (!obj.uploaded) history.replaceState(null, '', `#${obj.id}`);
+    }
+
+    // ---- After each load: size + animations ----
+    const cm = (m) => Math.round(m * 100);
+    const HIDDEN_CLIPS = /HitReact/;
+    viewer.addEventListener('load', () => {
+      viewer.jumpCameraToGoal();
+      const d = viewer.getDimensions();
+      const text = `L ${cm(Math.max(d.x, d.z))} · W ${cm(Math.min(d.x, d.z))} · H ${cm(d.y)} cm`;
+      $('size').textContent = text;
+
+      const clips = (viewer.availableAnimations || []).filter(c => !HIDDEN_CLIPS.test(c));
+      if (!clips.length) {
+        $('anims').innerHTML = '<span class="none">Static object</span>';
+        return;
+      }
+      const sorted = [...clips].sort((a, b) =>
+        (CLIP_ORDER.indexOf(a) + 1 || 99) - (CLIP_ORDER.indexOf(b) + 1 || 99));
+      const start = clips.includes(current.idle) ? current.idle : sorted[0];
+      $('anims').innerHTML = sorted.map(c =>
+        `<button class="chip" type="button" data-clip="${c}" aria-pressed="${c === start}">${CLIP_LABEL[c] || c}</button>`).join('');
+      play(start);
+    });
+
+    function play(clip) {
+      viewer.animationName = clip;
+      viewer.play({ repetitions: Infinity });
+      document.querySelectorAll('.chip').forEach(b => b.setAttribute('aria-pressed', b.dataset.clip === clip));
+    }
+    $('anims').addEventListener('click', (e) => {
+      const b = e.target.closest('.chip');
+      if (b) play(b.dataset.clip);
+    });
+
+    // ---- True size toggle ----
+    $('trueSize').addEventListener('change', (e) => {
+      viewer.setAttribute('ar-scale', e.target.checked ? 'fixed' : 'auto');
+    });
+
+    // ---- AR ----
+    const desktopNote = 'Open this page on your phone to place objects in your room.';
+    function setNote(t) { note.textContent = t; }
+    $('go').addEventListener('click', () => {
+      if (viewer.canActivateAR) viewer.activateAR();
+      else setNote('AR needs a phone: Chrome on Android (with Google Play Services for AR) or Safari on iPhone/iPad.');
+    });
+    viewer.addEventListener('ar-status', (e) => {
+      const s = e.detail.status;
+      if (s === 'session-started') setNote('Move your phone slowly over the floor until the object appears.');
+      if (s === 'object-placed') setNote('');
+      if (s === 'failed') setNote('AR couldn’t start. Allow camera access, and on Android make sure Google Play Services for AR is installed.');
+      if (s === 'not-presenting' && !current?.uploaded) setNote('');
+    });
+
+    // ---- Start ----
+    const fromHash = OBJECTS.find(o => o.id === location.hash.slice(1));
+    customElements.whenDefined('model-viewer').then(() => {
+      select(fromHash || OBJECTS[0]);
+      setTimeout(() => { if (!viewer.canActivateAR && !note.textContent) setNote(desktopNote); }, 800);
+    });
+  </script>
+</body>
+</html>
